@@ -6,8 +6,8 @@ import ImportTools from './components/ImportTools';
 import Vault from './components/Vault';
 import PrintSheet from './components/PrintSheet';
 import { Layer, CanvasConfig, Product, ColumnMapping, HistoryRecord } from './types';
-import { INITIAL_LAYERS, CANVAS_CONFIG } from './constants';
-import { Layout, Database, History, Printer, ZoomIn, ZoomOut, Upload, Search, Save, PlusCircle, CheckSquare, Square } from 'lucide-react';
+import { INITIAL_LAYERS, CANVAS_CONFIG, STAFF_PICK_LAYERS } from './constants';
+import { Layout, Database, History, Printer, ZoomIn, ZoomOut, Upload, Search, Save, CheckSquare, Square, CheckCircle, ArrowRightCircle } from 'lucide-react';
 
 const App: React.FC = () => {
   // --- STATE ---
@@ -20,7 +20,8 @@ const App: React.FC = () => {
       splitRatio: 0.6,
   });
   
-  const [viewMode, setViewMode] = useState<'batch' | 'vault' | 'architecture'>('batch');
+  // VIEW MODE: Added 'print' as a main tab
+  const [viewMode, setViewMode] = useState<'batch' | 'vault' | 'architecture' | 'print'>('batch');
   const [zoomLevel, setZoomLevel] = useState(0.85);
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -31,10 +32,12 @@ const App: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [history, setHistory] = useState<HistoryRecord[]>([]);
+  
+  // UI State
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle');
 
   // PRODUCTION ENGINE STATE
   const [printQueue, setPrintQueue] = useState<{ id: string; layers: Layer[] }[]>([]);
-  const [showPrintSheet, setShowPrintSheet] = useState(false);
   const [checkedProducts, setCheckedProducts] = useState<Set<number>>(new Set());
   const [customBadges, setCustomBadges] = useState<string[]>([]); // Base64 strings
 
@@ -44,16 +47,64 @@ const App: React.FC = () => {
     const savedHistory = localStorage.getItem('std_history');
     if (savedHistory) setHistory(JSON.parse(savedHistory));
     
-    const initLayerMap: Record<string, string> = {};
-    INITIAL_LAYERS.forEach(l => {
-        if (l.id.includes('product-name-1')) initLayerMap[l.id] = 'product-name-1';
-        if (l.id.includes('active-price')) initLayerMap[l.id] = 'active-price';
-        if (l.id.includes('badge-points-group')) initLayerMap[l.id] = 'badge-points-group';
-        if (l.id.includes('category-label')) initLayerMap[l.id] = 'category-label';
-        if (l.id.includes('was-price')) initLayerMap[l.id] = 'was-price';
-    });
-    setLayerMapping(initLayerMap);
+    // LOAD LAYER MAPPING
+    const savedLayerMapping = localStorage.getItem('std_layer_mapping');
+    if (savedLayerMapping) {
+        setLayerMapping(JSON.parse(savedLayerMapping));
+    } else {
+        // Initialize default bindings
+        const initLayerMap: Record<string, string> = {};
+        INITIAL_LAYERS.forEach(l => {
+            if (l.id.includes('product-name-1')) initLayerMap[l.id] = 'product-name-1';
+            if (l.id.includes('product-name-2')) initLayerMap[l.id] = 'product-name-2';
+            if (l.id.includes('active-price')) initLayerMap[l.id] = 'active-price';
+            if (l.id.includes('category-label')) initLayerMap[l.id] = 'category-label';
+            if (l.id.includes('was-price')) initLayerMap[l.id] = 'was-price';
+            if (l.id.includes('size-label')) initLayerMap[l.id] = 'size-label';
+            if (l.id.includes('tasting-notes')) initLayerMap[l.id] = 'tasting-notes';
+        });
+        setLayerMapping(initLayerMap);
+    }
   }, []);
+
+  // --- SMART MATH HELPER ---
+  const recalculateSmartLayers = (currentLayers: Layer[]): Layer[] => {
+      const getPrice = (id: string) => {
+          let targetLayer = currentLayers.find(x => x.id === id);
+          if (!targetLayer) {
+             const mappedId = Object.keys(layerMapping).find(key => layerMapping[key] === id);
+             if (mappedId) targetLayer = currentLayers.find(x => x.id === mappedId);
+          }
+          if (!targetLayer || !targetLayer.content) return 0;
+          return parseFloat(targetLayer.content.replace(/[^0-9.]/g, '')) || 0;
+      };
+
+      const activePrice = getPrice('active-price');
+      const wasPrice = getPrice('was-price');
+      const savings = wasPrice - activePrice;
+
+      const ribbonBgIndex = currentLayers.findIndex(l => l.id === 'ribbon-bg');
+      const ribbonTextIndex = currentLayers.findIndex(l => l.id === 'ribbon-text');
+
+      if (ribbonBgIndex === -1 || ribbonTextIndex === -1) return currentLayers;
+
+      const newLayers = [...currentLayers];
+      const ribbonBg = { ...newLayers[ribbonBgIndex], style: { ...newLayers[ribbonBgIndex].style } };
+      const ribbonText = { ...newLayers[ribbonTextIndex], style: { ...newLayers[ribbonTextIndex].style } };
+
+      if (wasPrice > activePrice && savings > 0.01) {
+          ribbonBg.style.display = 'flex';
+          ribbonText.style.display = 'block';
+          ribbonText.content = `SAVE $${savings.toFixed(2)}`;
+      } else {
+          ribbonBg.style.display = 'none';
+          ribbonText.style.display = 'none';
+      }
+
+      newLayers[ribbonBgIndex] = ribbonBg;
+      newLayers[ribbonTextIndex] = ribbonText;
+      return newLayers;
+  };
 
   // --- CANVAS HANDLERS ---
   const handleSelectLayer = useCallback((id: string) => {
@@ -65,18 +116,25 @@ const App: React.FC = () => {
   }, []);
 
   const handleUpdateLayer = useCallback((id: string, updates: Partial<Layer>) => {
-      setLayers(prev => prev.map(l => l.id !== id ? l : { 
-          ...l, ...updates, 
-          style: updates.style ? { ...l.style, ...updates.style } : l.style 
-      }));
-  }, []);
+      setLayers(prev => {
+          let updatedLayers = prev.map(l => l.id !== id ? l : { 
+              ...l, ...updates, 
+              style: updates.style ? { ...l.style, ...updates.style } : l.style 
+          });
+          updatedLayers = recalculateSmartLayers(updatedLayers);
+          return updatedLayers;
+      });
+  }, [layerMapping]); 
   
   const handleUpdateConfig = (updates: Partial<CanvasConfig>) => {
       setCanvasConfig(prev => ({ ...prev, ...updates }));
   };
 
   const handleBindLayer = (layerId: string, systemKey: string) => {
-      setLayerMapping(prev => ({ ...prev, [layerId]: systemKey }));
+      const newMapping = { ...layerMapping, [layerId]: systemKey };
+      setLayerMapping(newMapping);
+      localStorage.setItem('std_layer_mapping', JSON.stringify(newMapping));
+      
       if (selectedProductIndex !== null && products[selectedProductIndex]) {
            const product = products[selectedProductIndex];
            const csvHeader = columnMapping[systemKey];
@@ -100,9 +158,8 @@ const App: React.FC = () => {
       setLayers([...layers, newLayer]);
   };
 
-  // --- SMART DATA LOGIC (AUTO-MATH) ---
+  // --- DATA MAPPING LOGIC ---
   const applyProductToLayers = (product: Product, currentLayers: Layer[], colMap: ColumnMapping, layMap: Record<string, string>) => {
-      // 1. Map Standard Fields
       let nextLayers = currentLayers.map(layer => {
           const systemKey = layMap[layer.id] || layer.id;
           const csvHeader = colMap[systemKey];
@@ -111,49 +168,7 @@ const App: React.FC = () => {
           }
           return layer;
       });
-
-      // 2. RIBBON LOGIC (Calculated)
-      const getPrice = (key: string) => {
-          // Find the layer mapped to this key to get its content, or find raw product data
-          const mappedLayerId = Object.keys(layMap).find(id => layMap[id] === key);
-          let val = null;
-          
-          // Try to get from layer content first (in case user edited it manually in Data Mode)
-          if (mappedLayerId) {
-              const l = nextLayers.find(nl => nl.id === mappedLayerId);
-              if (l) val = l.content;
-          }
-          
-          // Fallback to CSV data
-          if (!val) {
-              const csvHeader = colMap[key];
-              if (csvHeader) val = product[csvHeader];
-          }
-
-          return val ? parseFloat(val.replace(/[^0-9.]/g, '')) : 0;
-      };
-
-      const activePrice = getPrice('active-price');
-      const wasPrice = getPrice('was-price');
-      const savings = wasPrice - activePrice;
-
-      // Find ribbon layers by ID (assuming standard template structure)
-      const ribbonBg = nextLayers.find(l => l.id === 'ribbon-bg');
-      const ribbonText = nextLayers.find(l => l.id === 'ribbon-text');
-
-      if (ribbonBg && ribbonText) {
-          if (wasPrice > activePrice && savings > 0.01) {
-              // SHOW RIBBON
-              ribbonBg.style.display = 'flex';
-              ribbonText.style.display = 'block';
-              ribbonText.content = `SAVE $${savings.toFixed(2)}`;
-          } else {
-              // HIDE RIBBON
-              ribbonBg.style.display = 'none';
-              ribbonText.style.display = 'none';
-          }
-      }
-
+      nextLayers = recalculateSmartLayers(nextLayers);
       return nextLayers;
   };
 
@@ -173,7 +188,7 @@ const App: React.FC = () => {
       }
   };
 
-  // --- BATCH PRINT QUEUE ---
+  // --- QUEUE LOGIC ---
   const toggleCheckProduct = (index: number) => {
       const newSet = new Set(checkedProducts);
       if (newSet.has(index)) newSet.delete(index);
@@ -183,50 +198,95 @@ const App: React.FC = () => {
 
   const addCheckedToQueue = () => {
       const newItems: { id: string; layers: Layer[] }[] = [];
-      
       checkedProducts.forEach(idx => {
           const prod = products[idx];
-          // Generate layers for this specific product based on current layout
           const renderedLayers = applyProductToLayers(prod, layers, columnMapping, layerMapping);
           newItems.push({
               id: `${Date.now()}-${idx}`,
               layers: renderedLayers
           });
       });
-
       setPrintQueue([...printQueue, ...newItems]);
-      setCheckedProducts(new Set()); // Clear selection
-      alert(`Added ${newItems.length} labels to Print Queue`);
+      setCheckedProducts(new Set());
+      alert(`Sent ${newItems.length} labels to Print Queue`);
   };
 
-  const handleBatchPrint = () => {
-      if (printQueue.length === 0) {
-          alert("Queue is empty!");
+  // --- TEMPLATE LOGIC ---
+  const handleLoadTemplate = (templateName: string) => {
+      if (templateName === 'staff-pick') {
+          if (confirm("Load Staff Pick Special layout? This will replace your current design.")) {
+              // Update Config for Red/White Theme
+              setCanvasConfig(prev => ({ 
+                  ...prev, 
+                  backgroundTop: '#FFFFFF', 
+                  backgroundBottom: '#D32F2F', 
+                  splitRatio: 0.65 // More white space for notes
+              }));
+              
+              let newLayers = JSON.parse(JSON.stringify(STAFF_PICK_LAYERS));
+              
+              // If product selected, apply data immediately
+              if (selectedProductIndex !== null) {
+                  newLayers = applyProductToLayers(products[selectedProductIndex], newLayers, columnMapping, layerMapping);
+              }
+              setLayers(newLayers);
+          }
           return;
       }
-      setShowPrintSheet(true);
-  };
 
-  // --- TEMPLATE SWAPPING ---
-  const handleLoadTemplate = (templateName: string) => {
-      // In a real app, this would load from a list of templates
-      // For now, we simulate by resetting to INITIAL_LAYERS but preserving data
-      if (confirm("Reset layout to default? (Data will be preserved)")) {
-          let newLayers = JSON.parse(JSON.stringify(INITIAL_LAYERS));
-          if (selectedProductIndex !== null) {
-              newLayers = applyProductToLayers(products[selectedProductIndex], newLayers, columnMapping, layerMapping);
+      // Logic for "Reset" or "Default"
+      if (templateName === 'default' || templateName === 'reset') {
+          if (confirm("Reset layout to default?")) {
+              setCanvasConfig({ ...CANVAS_CONFIG, backgroundTop: '#F5F0E1', backgroundBottom: '#7B1E36', splitRatio: 0.6 });
+              let newLayers = JSON.parse(JSON.stringify(INITIAL_LAYERS));
+              if (selectedProductIndex !== null) {
+                  newLayers = applyProductToLayers(products[selectedProductIndex], newLayers, columnMapping, layerMapping);
+              }
+              setLayers(newLayers);
           }
-          setLayers(newLayers);
-      }
+      } 
   };
 
-  // --- VAULT UPDATE ---
+  // --- VAULT / SAVE TEMPLATE LOGIC ---
+  const handleSaveToVault = () => {
+      const name = prompt("Enter a name for this template:", "Custom Template");
+      if (!name) return;
+
+      const record: HistoryRecord = {
+          id: Date.now().toString(),
+          timestamp: Date.now(),
+          productName: "Template", 
+          templateName: name, // User provided name
+          printDate: new Date().toISOString(),
+          layers: JSON.parse(JSON.stringify(layers)),
+          layerMapping: JSON.parse(JSON.stringify(layerMapping))
+      };
+      
+      const newHistory = [...history, record];
+      setHistory(newHistory);
+      localStorage.setItem('std_history', JSON.stringify(newHistory));
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+  };
+
   const updateVaultRecord = (id: string, field: string, value: string) => {
       const newHistory = history.map(h => h.id === id ? { ...h, [field]: value } : h);
       setHistory(newHistory);
       localStorage.setItem('std_history', JSON.stringify(newHistory));
   };
+  
+  const handleLoadFromVault = (record: HistoryRecord) => {
+      if (record.layers) {
+          setLayers(JSON.parse(JSON.stringify(record.layers)));
+          if (record.layerMapping) {
+              setLayerMapping(JSON.parse(JSON.stringify(record.layerMapping)));
+              localStorage.setItem('std_layer_mapping', JSON.stringify(record.layerMapping));
+          }
+          setViewMode('batch'); // Go to Data Mode
+      }
+  };
 
+  // --- SEARCH ---
   const filteredProducts = products.filter(p => 
     Object.values(p).some(val => String(val).toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -234,17 +294,6 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col h-screen w-full bg-[#121212] text-gray-200 font-sans overflow-hidden">
       
-      {/* PRINT OVERLAY */}
-      {showPrintSheet && (
-          <PrintSheet 
-            queue={printQueue} 
-            config={canvasConfig} 
-            onClose={() => setShowPrintSheet(false)}
-            onPrint={() => window.print()}
-            onRemoveFromQueue={(i) => setPrintQueue(printQueue.filter((_, idx) => idx !== i))}
-          />
-      )}
-
       {/* HEADER */}
       <header className="h-16 border-b border-[rgba(255,255,255,0.08)] bg-[#121212] flex items-center justify-between px-6 z-50 shrink-0">
          <div className="flex items-center gap-4">
@@ -264,134 +313,162 @@ const App: React.FC = () => {
              <button onClick={() => setViewMode('vault')} className={`flex items-center gap-2 px-4 py-1.5 rounded-sm text-[10px] font-bold uppercase tracking-widest transition-all ${viewMode === 'vault' ? 'bg-[#D4AF37] text-black' : 'text-gray-500 hover:text-white'}`}>
                 <History size={12} /> Vault
              </button>
+             {/* NEW PRINT TAB */}
+             <button onClick={() => setViewMode('print')} className={`flex items-center gap-2 px-4 py-1.5 rounded-sm text-[10px] font-bold uppercase tracking-widest transition-all ${viewMode === 'print' ? 'bg-[#D4AF37] text-black' : 'text-gray-500 hover:text-white'}`}>
+                <Printer size={12} /> Print Queue <span className="ml-1 bg-white/20 px-1 rounded-sm text-[9px]">{printQueue.length}</span>
+             </button>
          </div>
 
          <div className="flex items-center gap-4">
+             {/* DATA MODE: LOAD TEMPLATE */}
              {viewMode === 'batch' && (
                   <select onChange={(e) => handleLoadTemplate(e.target.value)} className="bg-[#1a1a1a] text-xs text-gray-300 border border-gray-700 rounded-sm px-2 py-1 outline-none">
                       <option value="default">Default Template</option>
+                      <option value="staff-pick">Staff Pick Special</option>
                       <option value="reset">Reset Layout</option>
                   </select>
              )}
-             
-             {/* BATCH PRINT BUTTON */}
-             <button 
-                onClick={handleBatchPrint}
-                className="bg-[#333] hover:bg-[#444] text-white px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all border border-gray-600 relative"
-             >
-                <Printer size={14} /> Batch Print ({printQueue.length})
-                {printQueue.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-[#D4AF37] rounded-full animate-pulse"></span>}
-             </button>
+
+             {/* DESIGN MODE: SAVE TEMPLATE */}
+             {viewMode === 'architecture' && (
+                  <button 
+                    onClick={handleSaveToVault}
+                    className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all border border-gray-600 ${saveStatus === 'saved' ? 'bg-green-600 text-white border-green-500' : 'bg-[#333] hover:bg-[#444] text-white'}`}
+                  >
+                    {saveStatus === 'saved' ? <CheckCircle size={14} /> : <Save size={14} />}
+                    {saveStatus === 'saved' ? 'Template Saved' : 'Save as Template'}
+                  </button>
+             )}
          </div>
       </header>
 
-      {/* MAIN CONTENT */}
+      {/* MAIN CONTENT AREA */}
       <main className="flex-1 flex overflow-hidden">
          
-         {/* LEFT COL: INVENTORY */}
-         {viewMode === 'batch' && (
-             <div className="w-[20%] min-w-[250px] border-r border-[rgba(255,255,255,0.08)] bg-[#121212] flex flex-col">
-                 <div className="p-4 border-b border-[rgba(255,255,255,0.05)] bg-[#141414]">
-                    <div className="flex justify-between items-center mb-3">
-                        <h3 className="text-[#D4AF37] text-xs font-bold uppercase tracking-widest">Inventory</h3>
-                        <div className="flex gap-2">
-                             <button onClick={addCheckedToQueue} title="Add Checked to Queue" className="text-gray-400 hover:text-[#D4AF37]"><PlusCircle size={14} /></button>
-                             <label htmlFor="csv-upload-input" className="cursor-pointer text-gray-500 hover:text-white"><Upload size={14} /></label>
+         {/* VIEW 1: PRINT SHEET (Full Screen) */}
+         {viewMode === 'print' ? (
+             <div className="w-full h-full bg-[#E5E5E5]">
+                 <PrintSheet 
+                    queue={printQueue} 
+                    config={canvasConfig} 
+                    onClose={() => setViewMode('batch')}
+                    onPrint={() => window.print()}
+                    onRemoveFromQueue={(i) => setPrintQueue(printQueue.filter((_, idx) => idx !== i))}
+                    onReorderQueue={(newQueue) => setPrintQueue(newQueue)}
+                  />
+             </div>
+         ) : viewMode === 'vault' ? (
+             // VIEW 2: VAULT
+             <div className="flex-1 bg-[#121212]">
+                 <Vault history={history} onReprint={handleLoadFromVault} onUpdateRecord={updateVaultRecord} />
+             </div>
+         ) : (
+             // VIEW 3: EDITOR (DATA & DESIGN)
+             <>
+                {/* LEFT COL: INVENTORY (Only in Data Mode) */}
+                {viewMode === 'batch' && (
+                    <div className="w-[20%] min-w-[250px] border-r border-[rgba(255,255,255,0.08)] bg-[#121212] flex flex-col">
+                        <div className="p-4 border-b border-[rgba(255,255,255,0.05)] bg-[#141414]">
+                            <div className="flex justify-between items-center mb-3">
+                                <h3 className="text-[#D4AF37] text-xs font-bold uppercase tracking-widest">Inventory</h3>
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={addCheckedToQueue} 
+                                        title="Send Checked to Print" 
+                                        className="flex items-center gap-1 bg-[#D4AF37] text-black px-2 py-1 rounded-sm text-[10px] font-bold uppercase hover:bg-white transition-colors"
+                                    >
+                                        <ArrowRightCircle size={12} /> Send to Print
+                                    </button>
+                                    <label htmlFor="csv-upload-input" className="cursor-pointer text-gray-500 hover:text-white pt-1"><Upload size={14} /></label>
+                                </div>
+                            </div>
+                            <ImportTools 
+                                onProductsImported={setProducts}
+                                onMappingChanged={handleMappingChanged}
+                                initialMapping={columnMapping}
+                            />
+                            <div className="relative mt-2">
+                                <Search size={12} className="absolute left-3 top-2.5 text-gray-600" />
+                                <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#0a0a0a] border border-[#333] text-gray-300 text-xs py-2 pl-8 pr-2 rounded-sm outline-none focus:border-[#D4AF37]" />
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto">
+                            {products.length === 0 ? (
+                                <div className="p-8 text-center text-gray-700 text-xs italic">Upload CSV to begin.</div>
+                            ) : (
+                                filteredProducts.map((product, idx) => {
+                                    let displayName = "Unknown Product";
+                                    const mappedNameKey = columnMapping['product-name-1'];
+                                    if (mappedNameKey && product[mappedNameKey]) {
+                                        displayName = product[mappedNameKey];
+                                    } else {
+                                        displayName = (Object.values(product)[0] as string) || '---';
+                                    }
+                                    
+                                    const sku = (Object.values(product)[1] as string) || '---';
+                                    const isSelected = selectedProductIndex === products.indexOf(product);
+                                    const isChecked = checkedProducts.has(products.indexOf(product));
+
+                                    return (
+                                        <div key={idx} className={`flex items-center p-2 border-b border-[#222] transition-colors ${isSelected ? 'bg-[#1a1a1a]' : 'hover:bg-[#161616]'}`}>
+                                            <button onClick={() => toggleCheckProduct(products.indexOf(product))} className="px-2 text-gray-500 hover:text-[#D4AF37]">
+                                                {isChecked ? <CheckSquare size={14} /> : <Square size={14} />}
+                                            </button>
+                                            <div className="flex-1 cursor-pointer overflow-hidden" onClick={() => handleSelectProduct(product)}>
+                                                <div className={`font-bold text-xs truncate ${isSelected ? 'text-white' : 'text-gray-400'}`}>{String(displayName)}</div>
+                                                <div className="text-[10px] text-gray-600 font-mono truncate">{String(sku)}</div>
+                                            </div>
+                                        </div>
+                                    )
+                                })
+                            )}
                         </div>
                     </div>
-                    <ImportTools 
-                        onProductsImported={setProducts}
-                        onMappingChanged={handleMappingChanged}
-                        initialMapping={columnMapping}
-                    />
-                    <div className="relative mt-2">
-                        <Search size={12} className="absolute left-3 top-2.5 text-gray-600" />
-                        <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#0a0a0a] border border-[#333] text-gray-300 text-xs py-2 pl-8 pr-2 rounded-sm outline-none focus:border-[#D4AF37]" />
-                    </div>
-                 </div>
+                )}
 
-                 <div className="flex-1 overflow-y-auto">
-                    {products.length === 0 ? (
-                        <div className="p-8 text-center text-gray-700 text-xs italic">Upload CSV to begin.</div>
-                    ) : (
-                        filteredProducts.map((product, idx) => {
-                            const name = Object.values(product)[0] || 'Unknown';
-                            const sku = Object.values(product)[1] || '---';
-                            const isSelected = selectedProductIndex === products.indexOf(product);
-                            const isChecked = checkedProducts.has(products.indexOf(product));
-
-                            return (
-                                <div key={idx} className={`flex items-center p-2 border-b border-[#222] transition-colors ${isSelected ? 'bg-[#1a1a1a]' : 'hover:bg-[#161616]'}`}>
-                                    <button onClick={() => toggleCheckProduct(products.indexOf(product))} className="px-2 text-gray-500 hover:text-[#D4AF37]">
-                                        {isChecked ? <CheckSquare size={14} /> : <Square size={14} />}
-                                    </button>
-                                    <div className="flex-1 cursor-pointer" onClick={() => handleSelectProduct(product)}>
-                                        <div className={`font-bold text-xs truncate ${isSelected ? 'text-white' : 'text-gray-400'}`}>{String(name)}</div>
-                                        <div className="text-[10px] text-gray-600 font-mono">{String(sku)}</div>
-                                    </div>
-                                </div>
-                            )
-                        })
-                    )}
-                 </div>
-             </div>
-         )}
-
-         {/* RIGHT COL: SIDEBAR */}
-         {(viewMode === 'batch' || viewMode === 'architecture') && (
-             <div className="w-[25%] min-w-[300px] border-r border-[rgba(255,255,255,0.08)] bg-[rgba(18,18,18,0.95)] z-20">
-                 <Sidebar
-                    layers={layers}
-                    selectedLayerId={selectedLayerId}
-                    config={canvasConfig}
-                    onUpdateLayer={handleUpdateLayer}
-                    onUpdateConfig={handleUpdateConfig}
-                    onDeleteLayer={(id) => setLayers(l => l.filter(x => x.id !== id))}
-                    onSelectLayer={handleSelectLayer}
-                    onBindLayer={handleBindLayer}
-                    viewMode={viewMode}
-                    customBadges={customBadges}
-                    onUploadBadge={(b64) => setCustomBadges([...customBadges, b64])}
-                    onAddCustomBadgeLayer={handleAddCustomBadgeLayer}
-                 />
-             </div>
-         )}
-
-         {/* CENTER: CANVAS */}
-         {(viewMode === 'batch' || viewMode === 'architecture') ? (
-             <div className="flex-1 bg-[#0a0a0a] relative flex flex-col min-w-0">
-                 <div className="absolute top-4 right-4 z-20 bg-[rgba(0,0,0,0.5)] backdrop-blur-sm p-1 rounded-full flex items-center border border-[rgba(255,255,255,0.1)]">
-                    <button onClick={() => setZoomLevel(Math.max(0.4, zoomLevel - 0.1))} className="p-2 text-gray-400 hover:text-white"><ZoomOut size={14} /></button>
-                    <span className="text-[10px] font-mono w-8 text-center">{Math.round(zoomLevel * 100)}%</span>
-                    <button onClick={() => setZoomLevel(Math.min(1.5, zoomLevel + 0.1))} className="p-2 text-gray-400 hover:text-white"><ZoomIn size={14} /></button>
-                 </div>
-                 
-                 <div className="absolute top-4 left-4 z-20">
-                     {viewMode === 'batch' ? (
-                         <span className="bg-[#D4AF37] text-black text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">Data Mode (Smart Calc Active)</span>
-                     ) : (
-                         <span className="bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">Design Mode</span>
-                     )}
-                 </div>
-
-                 <div className="flex-1 overflow-auto relative custom-scrollbar">
-                    <Canvas
+                {/* RIGHT COL: SIDEBAR (Properties) */}
+                <div className="w-[25%] min-w-[300px] border-r border-[rgba(255,255,255,0.08)] bg-[rgba(18,18,18,0.95)] z-20">
+                    <Sidebar
                         layers={layers}
                         selectedLayerId={selectedLayerId}
                         config={canvasConfig}
-                        onSelectLayer={handleSelectLayer}
-                        onUpdateLayerPosition={handleUpdateLayerPosition}
                         onUpdateLayer={handleUpdateLayer}
                         onUpdateConfig={handleUpdateConfig}
+                        onDeleteLayer={(id) => setLayers(l => l.filter(x => x.id !== id))}
+                        onSelectLayer={handleSelectLayer}
+                        onBindLayer={handleBindLayer}
                         viewMode={viewMode}
-                        scale={zoomLevel}
+                        customBadges={customBadges}
+                        onUploadBadge={(b64) => setCustomBadges([...customBadges, b64])}
+                        onAddCustomBadgeLayer={handleAddCustomBadgeLayer}
+                        layerMapping={layerMapping} 
                     />
-                 </div>
-             </div>
-         ) : (
-             <div className="flex-1 bg-[#121212]">
-                 <Vault history={history} onReprint={() => {}} onUpdateRecord={updateVaultRecord} />
-             </div>
+                </div>
+
+                {/* CENTER: CANVAS */}
+                <div className="flex-1 bg-[#0a0a0a] relative flex flex-col min-w-0">
+                    <div className="absolute top-4 right-4 z-20 bg-[rgba(0,0,0,0.5)] backdrop-blur-sm p-1 rounded-full flex items-center border border-[rgba(255,255,255,0.1)]">
+                        <button onClick={() => setZoomLevel(Math.max(0.4, zoomLevel - 0.1))} className="p-2 text-gray-400 hover:text-white"><ZoomOut size={14} /></button>
+                        <span className="text-[10px] font-mono w-8 text-center">{Math.round(zoomLevel * 100)}%</span>
+                        <button onClick={() => setZoomLevel(Math.min(1.5, zoomLevel + 0.1))} className="p-2 text-gray-400 hover:text-white"><ZoomIn size={14} /></button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-auto relative custom-scrollbar">
+                        <Canvas
+                            layers={layers}
+                            selectedLayerId={selectedLayerId}
+                            config={canvasConfig}
+                            onSelectLayer={handleSelectLayer}
+                            onUpdateLayerPosition={handleUpdateLayerPosition}
+                            onUpdateLayer={handleUpdateLayer}
+                            onUpdateConfig={handleUpdateConfig}
+                            viewMode={viewMode}
+                            scale={zoomLevel}
+                        />
+                    </div>
+                </div>
+             </>
          )}
 
       </main>

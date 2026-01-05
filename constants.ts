@@ -28,50 +28,28 @@ export const INITIAL_LAYERS: Layer[] = [
     className: 'border-gold-foil',
   },
 
-  // --- HEADER SECTION ---
+  // --- SMART HEADER (Lines + Text Combined) ---
   {
-    id: 'header-text',
-    type: 'text',
-    name: 'Header: Staff Pick',
+    id: 'header-combined',
+    type: 'group', // Using group type to allow custom rendering in Canvas.tsx while keeping content editable
+    name: 'Smart Header',
     content: 'STAFF PICK',
     x: 0,
     y: 35,
     style: {
       width: 400,
+      height: 30,
       color: '#D4AF37', 
       fontSize: 28,
       fontWeight: 700,
       fontFamily: 'Cinzel, serif',
       textAlign: 'center',
       letterSpacing: '2px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
     },
     className: 'text-gold-foil',
-  },
-  {
-    id: 'header-line-left',
-    type: 'shape',
-    name: 'Header Line Left',
-    x: 35,
-    y: 50,
-    style: {
-      width: 50,
-      height: 2,
-      backgroundColor: '#D4AF37',
-    },
-    className: 'bg-gold-foil',
-  },
-  {
-    id: 'header-line-right',
-    type: 'shape',
-    name: 'Header Line Right',
-    x: 315,
-    y: 50,
-    style: {
-      width: 50,
-      height: 2,
-      backgroundColor: '#D4AF37',
-    },
-    className: 'bg-gold-foil',
   },
 
   // --- NEW: CATEGORY FIELD ---
@@ -84,6 +62,7 @@ export const INITIAL_LAYERS: Layer[] = [
     y: 70,
     style: {
       width: 360,
+      height: 20, // Defined height
       color: '#666666',
       fontSize: 12,
       fontWeight: 700,
@@ -104,9 +83,9 @@ export const INITIAL_LAYERS: Layer[] = [
     y: 95,
     style: {
       width: 360,
-      height: 50, // Explicit height for AutoFit
+      height: 60, // Increased height for huge text
       color: '#222222',
-      fontSize: 40,
+      fontSize: 55, // Max font size target
       fontWeight: 700,
       textAlign: 'center',
       fontFamily: 'Cinzel, serif',
@@ -119,10 +98,10 @@ export const INITIAL_LAYERS: Layer[] = [
     name: 'Varietal Name',
     content: 'RESERVE',
     x: 20,
-    y: 145,
+    y: 155,
     style: {
       width: 360,
-      height: 40, // Explicit height for AutoFit
+      height: 40, // Explicit height
       color: '#333333',
       fontSize: 32,
       fontWeight: 600,
@@ -137,12 +116,15 @@ export const INITIAL_LAYERS: Layer[] = [
     name: 'Size Label',
     content: '750ml',
     x: 300,
-    y: 185,
+    y: 195,
     style: {
+      width: 80,
+      height: 20,
       color: '#555555',
       fontSize: 14,
       fontWeight: 600,
       fontFamily: 'Montserrat, sans-serif',
+      textAlign: 'right'
     },
   },
 
@@ -156,6 +138,7 @@ export const INITIAL_LAYERS: Layer[] = [
     y: 215,
     style: {
       width: 400,
+      height: 25,
       color: '#D4AF37',
       fontSize: 20,
       fontWeight: 600,
@@ -174,8 +157,9 @@ export const INITIAL_LAYERS: Layer[] = [
     y: 240,
     style: {
       width: 400,
+      height: 90, // Explicit height for AutoFit (240 -> 330 area)
       color: '#1A1A1A',
-      fontSize: 88,
+      fontSize: 90,
       fontWeight: 700,
       textAlign: 'center',
       fontFamily: 'Oswald, sans-serif',
@@ -211,6 +195,7 @@ export const INITIAL_LAYERS: Layer[] = [
     y: 345,
     style: {
       width: 300,
+      height: 30,
       color: '#222222',
       fontSize: 28,
       fontWeight: 700,
@@ -218,63 +203,6 @@ export const INITIAL_LAYERS: Layer[] = [
       zIndex: 11,
       fontFamily: 'Oswald, sans-serif',
     },
-  },
-
-  // --- GROUPED BADGE ---
-  {
-    id: 'badge-points-group',
-    type: 'group',
-    name: 'Badge: 94 Points',
-    x: 35,
-    y: 410,
-    style: {
-      width: 90,
-      height: 90,
-      zIndex: 20,
-    },
-    content: '94', // Score
-  },
-
-  // --- ADDITIONAL BADGES ---
-  {
-    id: 'badge-gluten-free',
-    type: 'shape',
-    name: 'Badge: Gluten Free',
-    x: 310,
-    y: 415,
-    style: { display: 'none', width: 70, height: 70 },
-    content: 'GF',
-    className: 'bg-gold-foil',
-  },
-  {
-    id: 'badge-organic',
-    type: 'shape',
-    name: 'Badge: Organic',
-    x: 310,
-    y: 415,
-    style: { display: 'none', width: 70, height: 70 },
-    content: 'Organic',
-    className: 'bg-green-foil',
-  },
-  {
-    id: 'badge-sugar-free',
-    type: 'shape',
-    name: 'Badge: Sugar Free',
-    x: 310,
-    y: 415,
-    style: { display: 'none', width: 70, height: 70 },
-    content: '0g Sugar',
-    className: 'bg-gold-foil',
-  },
-  {
-    id: 'badge-staff-pick',
-    type: 'shape',
-    name: 'Badge: Staff Pick',
-    x: 310,
-    y: 415,
-    style: { display: 'none', width: 80, height: 80 },
-    content: 'Staff',
-    className: 'bg-red-foil',
   },
 
   // --- TASTING NOTES ---
@@ -287,6 +215,7 @@ export const INITIAL_LAYERS: Layer[] = [
     y: 425,
     style: {
       width: 250,
+      height: 60, // Fixed height
       maxWidth: 250,
       color: '#ffffff',
       fontSize: 16,
@@ -307,6 +236,7 @@ export const INITIAL_LAYERS: Layer[] = [
     y: 540,
     style: {
       width: 400,
+      height: 30,
       textAlign: 'center',
       color: '#D4AF37',
       fontSize: 24,
@@ -315,4 +245,163 @@ export const INITIAL_LAYERS: Layer[] = [
     },
     className: 'text-gold-foil',
   },
+];
+
+export const STAFF_PICK_LAYERS: Layer[] = [
+  // --- HEADER BLOCK ---
+  {
+    id: 'header-block',
+    type: 'shape',
+    name: 'Header Background',
+    x: 0,
+    y: 0,
+    style: {
+      width: 400,
+      height: 80,
+      backgroundColor: '#D32F2F', // Bold Red
+      zIndex: 0
+    }
+  },
+  {
+    id: 'header-text',
+    type: 'text',
+    name: 'Header Text',
+    content: 'STAFF PICK',
+    x: 0,
+    y: 20,
+    style: {
+      width: 400,
+      height: 40,
+      color: '#FFFFFF',
+      fontSize: 36,
+      fontWeight: 800,
+      fontFamily: 'Oswald, sans-serif',
+      textAlign: 'center',
+      letterSpacing: '2px',
+      zIndex: 1
+    }
+  },
+
+  // --- PRODUCT ---
+  {
+    id: 'product-name-1',
+    type: 'text',
+    name: 'Brand Name',
+    content: 'PRODUCT NAME',
+    x: 20,
+    y: 100,
+    style: {
+      width: 360,
+      height: 50,
+      color: '#000000',
+      fontSize: 42,
+      fontWeight: 800,
+      textAlign: 'center',
+      fontFamily: 'Oswald, sans-serif',
+      zIndex: 1
+    }
+  },
+  {
+    id: 'product-name-2',
+    type: 'text',
+    name: 'Subtitle',
+    content: 'Region / Varietal',
+    x: 20,
+    y: 150,
+    style: {
+      width: 360,
+      height: 30,
+      color: '#555555',
+      fontSize: 20,
+      fontWeight: 500,
+      textAlign: 'center',
+      fontFamily: 'Montserrat, sans-serif',
+      textTransform: 'uppercase',
+      zIndex: 1
+    }
+  },
+  
+  // --- NOTES (Handwritten feel) ---
+  {
+    id: 'tasting-notes',
+    type: 'text',
+    name: 'Tasting Notes',
+    content: '"This wine blew me away. Incredible depth of flavor with hints of dark cherry and chocolate."',
+    x: 40,
+    y: 200,
+    style: {
+      width: 320,
+      height: 120,
+      color: '#222222',
+      fontSize: 22,
+      fontWeight: 400,
+      fontStyle: 'italic',
+      textAlign: 'center',
+      fontFamily: 'Playfair Display, serif',
+      lineHeight: 1.4,
+      zIndex: 1
+    }
+  },
+
+  // --- BOTTOM SECTION (Price) ---
+  // The background bottom color will be set to Red via Config
+  
+  {
+    id: 'was-price',
+    type: 'text',
+    name: 'Was Price',
+    content: 'WAS $29.99',
+    x: 0,
+    y: 390, // Adjusted to sit just above the fold or inside the red
+    style: {
+      width: 400,
+      height: 20,
+      color: '#ffcccc',
+      fontSize: 16,
+      fontWeight: 600,
+      textDecoration: 'line-through',
+      textAlign: 'center',
+      fontFamily: 'Montserrat, sans-serif',
+      zIndex: 10
+    }
+  },
+  {
+    id: 'active-price',
+    type: 'text',
+    name: 'Active Price',
+    content: '$24.99',
+    x: 0,
+    y: 420,
+    style: {
+      width: 400,
+      height: 100,
+      color: '#FFFFFF',
+      fontSize: 90,
+      fontWeight: 800,
+      textAlign: 'center',
+      fontFamily: 'Oswald, sans-serif',
+      zIndex: 10
+    }
+  },
+  
+  {
+    id: 'footer-signature',
+    type: 'text',
+    name: 'Signature',
+    content: 'HIGHLY RECOMMENDED',
+    x: 0,
+    y: 530,
+    style: {
+      width: 400,
+      height: 30,
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: 700,
+      letterSpacing: '3px',
+      textAlign: 'center',
+      fontFamily: 'Montserrat, sans-serif',
+      textTransform: 'uppercase',
+      zIndex: 10
+    }
+  }
 ];

@@ -14,6 +14,7 @@ interface CanvasProps {
   onUpdateConfig: (updates: Partial<CanvasConfig>) => void;
   viewMode: 'batch' | 'architecture' | 'vault';
   scale?: number;
+  minimal?: boolean; // New prop for Print Sheet
 }
 
 // --- BADGE RENDERER ---
@@ -27,16 +28,6 @@ const BadgeRenderer: React.FC<{ id: string, content?: string }> = ({ id, content
                  <text x="50" y="62" textAnchor="middle" fill="#D4AF37" fontSize="10" fontWeight="700" fontFamily="Montserrat" letterSpacing="1">POINTS</text>
                  <text x="50" y="78" textAnchor="middle" fill="#D4AF37" fontSize="8" fontWeight="600" fontFamily="Montserrat">Whisky Advocate</text>
             </svg>
-        );
-    }
-    // ... (Existing badge renderers kept for brevity, logic remains same) ...
-    if (id.includes('gluten-free')) {
-         return (
-             <svg viewBox="0 0 100 100" className="w-full h-full pointer-events-none">
-                 <circle cx="50" cy="50" r="48" fill="#1a1a1a" stroke="#D4AF37" strokeWidth="2" />
-                 <circle cx="50" cy="50" r="42" fill="none" stroke="#D4AF37" strokeWidth="1" strokeDasharray="4 2" />
-                 <text x="50" y="65" textAnchor="middle" fill="#D4AF37" fontSize="24" fontWeight="900" fontFamily="Oswald" dy="20">GF</text>
-             </svg>
         );
     }
     return null;
@@ -195,7 +186,7 @@ const InteractiveLayer: React.FC<{
   );
 };
 
-const Canvas: React.FC<CanvasProps> = React.memo(({ layers, selectedLayerId, config, onSelectLayer, onUpdateLayerPosition, onUpdateLayer, onUpdateConfig, viewMode, scale = 1 }) => {
+const Canvas: React.FC<CanvasProps> = React.memo(({ layers, selectedLayerId, config, onSelectLayer, onUpdateLayerPosition, onUpdateLayer, onUpdateConfig, viewMode, scale = 1, minimal = false }) => {
   const [draggingSplit, setDraggingSplit] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   const isInteractive = viewMode === 'architecture';
@@ -222,47 +213,83 @@ const Canvas: React.FC<CanvasProps> = React.memo(({ layers, selectedLayerId, con
   const activeBadges = layers.filter(l => l.id.startsWith('badge-'));
   const standardLayers = layers.filter(l => !l.id.startsWith('badge-'));
 
-  return (
-    <div className="flex items-center justify-center p-8 min-h-full overflow-auto bg-[#0a0a0a] print:p-0 print:bg-white">
-      <div style={{ transform: `scale(${scale})`, transformOrigin: 'top center', marginTop: `${(scale - 1) * 20}px`, marginBottom: '100px' }}>
-        <div id="canvas-root" ref={canvasRef} className="relative shadow-2xl bg-white overflow-hidden flex flex-col print:shadow-none"
-            style={{ width: config.width, height: config.height }}
-            onMouseDown={() => onSelectLayer('')}
-        >
-            <div className="absolute top-0 left-0 w-full" style={{ height: `${config.splitRatio * 100}%`, backgroundColor: config.backgroundTop }} />
-            <div className="absolute bottom-0 left-0 w-full" style={{ height: `${(1 - config.splitRatio) * 100}%`, backgroundColor: config.backgroundBottom }} />
-            
-            {isInteractive && (
-                 <div className="absolute left-0 w-full h-1 cursor-row-resize z-[45] group hover:bg-blue-500/50 transition-colors print:hidden" style={{ top: `${config.splitRatio * 100}%`, transform: 'translateY(-50%)' }} onMouseDown={handleSplitMouseDown}>
-                     <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-8 h-4 bg-white/20 backdrop-blur-md rounded-full border border-white/50 flex items-center justify-center opacity-0 group-hover:opacity-100 shadow-lg pointer-events-none group-hover:pointer-events-auto">
-                        <Move size={10} className="text-white"/>
-                     </div>
-                 </div>
-            )}
-            <div className="absolute inset-4 border-[2px] border-[#D4AF37] pointer-events-none z-40 border-gold-foil" />
+  // RENDER CONTENT ONLY (For reusable logic)
+  // CHANGED: id="canvas-root" -> className="canvas-root" to allow multiple instances
+  const renderContent = () => (
+    <div className="canvas-root relative shadow-2xl bg-white overflow-hidden flex flex-col print:shadow-none"
+        ref={canvasRef}
+        style={{ width: config.width, height: config.height }}
+        onMouseDown={() => onSelectLayer('')}
+    >
+        <div className="absolute top-0 left-0 w-full" style={{ height: `${config.splitRatio * 100}%`, backgroundColor: config.backgroundTop }} />
+        <div className="absolute bottom-0 left-0 w-full" style={{ height: `${(1 - config.splitRatio) * 100}%`, backgroundColor: config.backgroundBottom }} />
+        
+        {isInteractive && (
+                <div className="absolute left-0 w-full h-1 cursor-row-resize z-[45] group hover:bg-blue-500/50 transition-colors print:hidden" style={{ top: `${config.splitRatio * 100}%`, transform: 'translateY(-50%)' }} onMouseDown={handleSplitMouseDown}>
+                    <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-8 h-4 bg-white/20 backdrop-blur-md rounded-full border border-white/50 flex items-center justify-center opacity-0 group-hover:opacity-100 shadow-lg pointer-events-none group-hover:pointer-events-auto">
+                    <Move size={10} className="text-white"/>
+                    </div>
+                </div>
+        )}
+        <div className="absolute inset-4 border-[2px] border-[#D4AF37] pointer-events-none z-40 border-gold-foil" />
 
-            {standardLayers.map(layer => {
-                if (layer.id === 'inner-border') return null;
+        {standardLayers.map(layer => {
+            if (layer.id === 'inner-border') return null;
+
+            if (layer.id === 'header-combined') {
                 return (
                     <InteractiveLayer key={layer.id} layer={layer} isSelected={selectedLayerId === layer.id} onSelect={onSelectLayer} onUpdatePosition={onUpdateLayerPosition} onUpdateSize={(id, w, h) => onUpdateLayer(id, { style: { ...layer.style, width: w, height: h } })} viewMode={viewMode}>
-                        {layer.type === 'shape' && (
-                            <div className={`w-full h-full ${layer.className || ''}`} style={{ backgroundColor: layer.style.backgroundColor, clipPath: layer.style.clipPath }} />
-                        )}
-                        {layer.type === 'image' && layer.content && (
-                            <img src={layer.content} className="w-full h-full object-contain pointer-events-none" alt={layer.name} />
-                        )}
-                        {layer.type === 'group' && layer.id === 'badge-points-group' && (
-                             <BadgeRenderer id="badge-points-group" content={layer.content} />
-                        )}
+                        <div className="flex items-center justify-center w-full h-full px-4 gap-4">
+                            <div className="h-[2px] bg-[#D4AF37] flex-1 min-w-[20px] bg-gold-foil"></div>
+                            <span style={{ 
+                                ...(layer.style as React.CSSProperties), 
+                                width: 'auto', 
+                                height: 'auto',
+                                position: 'relative', 
+                                top: 'auto', 
+                                left: 'auto',
+                                flex: '0 0 auto'
+                            }}>
+                                {layer.content}
+                            </span>
+                            <div className="h-[2px] bg-[#D4AF37] flex-1 min-w-[20px] bg-gold-foil"></div>
+                        </div>
                     </InteractiveLayer>
                 );
-            })}
-            {activeBadges.map(badge => (
-                <InteractiveLayer key={badge.id} layer={badge} isSelected={selectedLayerId === badge.id} onSelect={onSelectLayer} onUpdatePosition={onUpdateLayerPosition} onUpdateSize={(id, w, h) => onUpdateLayer(id, { style: { ...badge.style, width: w, height: h } })} viewMode={viewMode}>
-                    <BadgeRenderer id={badge.id} />
+            }
+
+            return (
+                <InteractiveLayer key={layer.id} layer={layer} isSelected={selectedLayerId === layer.id} onSelect={onSelectLayer} onUpdatePosition={onUpdateLayerPosition} onUpdateSize={(id, w, h) => onUpdateLayer(id, { style: { ...layer.style, width: w, height: h } })} viewMode={viewMode}>
+                    {layer.type === 'shape' && (
+                        <div className={`w-full h-full ${layer.className || ''}`} style={{ backgroundColor: layer.style.backgroundColor, clipPath: layer.style.clipPath }} />
+                    )}
+                    {layer.type === 'image' && layer.content && (
+                        <img src={layer.content} className="w-full h-full object-contain pointer-events-none" alt={layer.name} />
+                    )}
+                    {layer.type === 'group' && layer.id === 'badge-points-group' && (
+                            <BadgeRenderer id="badge-points-group" content={layer.content} />
+                    )}
                 </InteractiveLayer>
-            ))}
-        </div>
+            );
+        })}
+        {activeBadges.map(badge => (
+            <InteractiveLayer key={badge.id} layer={badge} isSelected={selectedLayerId === badge.id} onSelect={onSelectLayer} onUpdatePosition={onUpdateLayerPosition} onUpdateSize={(id, w, h) => onUpdateLayer(id, { style: { ...badge.style, width: w, height: h } })} viewMode={viewMode}>
+                <BadgeRenderer id={badge.id} />
+            </InteractiveLayer>
+        ))}
+    </div>
+  );
+
+  // If Minimal (Print Mode), just return content without editor chrome
+  if (minimal) {
+      return renderContent();
+  }
+
+  // Normal Editor View - Wrapped in .single-canvas-mode for CSS targeting
+  return (
+    <div className="single-canvas-mode flex items-center justify-center p-8 min-h-full overflow-auto bg-[#0a0a0a] print:p-0 print:bg-white">
+      <div style={{ transform: `scale(${scale})`, transformOrigin: 'top center', marginTop: `${(scale - 1) * 20}px`, marginBottom: '100px' }}>
+         {renderContent()}
       </div>
     </div>
   );

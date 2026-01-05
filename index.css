@@ -1,3 +1,4 @@
+
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Oswald:wght@300;400;500;700&family=Montserrat:wght@300;400;500;600;700;800;900&display=swap');
 
 @tailwind base;
@@ -94,9 +95,30 @@ h1, h2, h3, .serif {
 /* STRICT PRINT STYLES */
 @media print {
   @page { margin: 0; size: auto; }
+  
+  /* CRITICAL: Override application overflow hidden which blocks printing */
+  html, body, #root, main {
+      overflow: visible !important;
+      height: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      display: block !important;
+      position: static !important;
+  }
+  
+  /* Defaults: Hide everything, show body as white */
+  body { background: white !important; }
   body * { visibility: hidden; }
-  #canvas-root, #canvas-root * { visibility: visible !important; }
-  #canvas-root {
+
+  /* 
+     CASE 1: SINGLE EDITOR PRINT 
+     Only activate if we are NOT in the PrintSheet view 
+  */
+  .single-canvas-mode, .single-canvas-mode * {
+      visibility: visible !important;
+  }
+  
+  .single-canvas-mode .canvas-root {
     position: fixed !important;
     left: 0 !important;
     top: 0 !important;
@@ -109,6 +131,24 @@ h1, h2, h3, .serif {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     transform: none !important;
-    background: white !important; /* Ensure bg prints */
+    background: white !important;
+    z-index: 9999;
+  }
+
+  /* 
+     CASE 2: BATCH PRINT SHEET (Overrides Single Editor)
+     If #print-sheet-root exists and is visible, it takes precedence
+  */
+  #print-sheet-root, #print-sheet-root * { 
+      visibility: visible !important; 
+  }
+  
+  /* Ensure print sheet root is positioned absolutely at top left */
+  #print-sheet-root {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
   }
 }

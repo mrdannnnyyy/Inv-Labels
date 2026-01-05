@@ -1,5 +1,4 @@
 
-
 export type LayerType = 'text' | 'shape' | 'image' | 'group';
 
 export interface LayerStyle {
@@ -71,4 +70,6 @@ export interface HistoryRecord {
   productName: string;
   templateName: string;
   printDate: string;
+  layers: Layer[]; // Snapshot of the design
+  layerMapping: Record<string, string>; // Snapshot of the bindings
 }

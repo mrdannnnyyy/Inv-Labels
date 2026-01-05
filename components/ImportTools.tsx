@@ -18,7 +18,7 @@ const SYSTEM_FIELDS = [
   { id: 'active-price', label: 'Price (Active)' },
   { id: 'was-price', label: 'Sale Price (Was)' },
   { id: 'size-label', label: 'Size / Format' },
-  { id: 'header-text', label: 'Category / Header' }, // Added Category mapping to Header Text
+  { id: 'category-label', label: 'Category / Header' }, // ALIGNED ID
   { id: 'tasting-notes', label: 'Description / Notes' },
 ];
 
